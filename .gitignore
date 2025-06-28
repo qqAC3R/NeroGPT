@@ -1,0 +1,5 @@
+# Ignore every Python virtual-env folder named ".venv"
+.venv/
+
+# Ignore every byte-code cache folder named "__pycache__"
+__pycache__/
