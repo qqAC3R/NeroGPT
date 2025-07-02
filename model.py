@@ -1,5 +1,7 @@
 import math
 import torch
+import inspect
+
 import torch.nn as nn
 from torch.nn import functional as F
 
@@ -170,3 +172,44 @@ class GPT(nn.Module):
         if non_embedding:
             n_params -= self.transformer.wpe.weight.numel()
         return n_params
+    
+    def try_to_compile(self):
+        sms = torch.cuda.get_device_properties(0).multi_processor_count
+        model = None
+        print(f"Number of CUDA multiprocessors: {sms}")
+        if sms >= 80:
+            model = torch.compile(self)  # compile the model for better performance
+            print("Model compiled successfully.")
+        else:
+            print("Skipping model compilation due to insufficient CUDA multiprocessors (>= 80 required).")
+        return model
+
+
+    def configure_optimizers(self, weight_decay, learning_rate, betas, device):
+        param_dict = {pn: p for pn, p in self.named_parameters() if p.requires_grad}
+
+        decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
+        no_decay_params = [p for n, p in param_dict.items() if p.dim() < 2]
+
+        optimzer_groups = [
+            {'params': decay_params, 'weight_decay': weight_decay},
+            {'params': no_decay_params, 'weight_decay': 0.0}
+        ]
+
+        num_decay_params = sum(p.numel() for p in decay_params)
+        num_no_decay_params = sum(p.numel() for p in no_decay_params)
+        print(f"Number of decayed tensors parameters: {len(decay_params)}, with {num_decay_params:,} parameters")
+        print(f"Number of non-decayed tensors parameters: {len(no_decay_params)}, with {num_no_decay_params:,} parameters")
+
+        fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters
+        use_fused = fused_available and device == 'cuda'
+        extra_args = dict(fused=True) if use_fused else dict()
+        print(f"Using {'fused' if use_fused else 'non-fused'} AdamW optimizer")
+
+        optimizer = torch.optim.AdamW(
+            optimzer_groups,
+            lr=learning_rate,
+            betas=betas,
+            **extra_args
+        )
+        return optimizer

@@ -23,7 +23,7 @@ model = GPT(config)
 checkpoint = torch.load("checkpoints/transformer_step_3000.pt", map_location=config.device)
 model.load_state_dict(checkpoint["model"])
 model.to(config.device)
-model.eval('ciuda')
+model.eval()
 
 text_input = input("Type text: ")
 
